@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "AD9851.h"
+#include <string.h>
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,9 +45,9 @@
 
 COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
-
 /* USER CODE BEGIN PV */
-
+char rx_buffer[100];
+uint8_t rx_index = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -94,7 +96,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
+  AD9851_Init();
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -145,6 +147,30 @@ int main(void)
 
       /* ..... Perform your action ..... */
     }
+
+    /* UART Command Processing */
+    uint8_t data;
+    if (HAL_UART_Receive(&hcom_uart[COM1], &data, 1, 0) == HAL_OK) {
+      if (data == '\n' || data == '\r') {
+        rx_buffer[rx_index] = '\0';
+        // Parse command
+        if (strncmp(rx_buffer, "FREQ ", 5) == 0) {
+          uint32_t freq = atoi(&rx_buffer[5]);
+          AD9851_SetFrequency(freq);
+          HAL_UART_Transmit(&hcom_uart[COM1], (uint8_t*)"OK\n", 3, 100);
+        } else if (strncmp(rx_buffer, "PHASE ", 6) == 0) {
+          uint16_t phase = atoi(&rx_buffer[6]);
+          AD9851_SetPhase(phase);
+          HAL_UART_Transmit(&hcom_uart[COM1], (uint8_t*)"OK\n", 3, 100);
+        } else {
+          HAL_UART_Transmit(&hcom_uart[COM1], (uint8_t*)"UNKNOWN CMD\n", 12, 100);
+        }
+        rx_index = 0;
+      } else if (rx_index < 99) {
+        rx_buffer[rx_index++] = data;
+      }
+    }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -218,15 +244,34 @@ void SystemClock_Config(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* Configure DDS control pins */
+  /* PA2 (D1/DATA), PA3 (D0/W_CLK), PA10 (D2/FU_UD) */
+  GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* PB3 (D3/RESET) */
+  GPIO_InitStruct.Pin = GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE END MX_GPIO_Init_2 */
 }

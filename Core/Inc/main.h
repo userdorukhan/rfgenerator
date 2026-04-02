@@ -67,6 +67,16 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
+/* DDS control pins */
+#define W_CLK_Pin GPIO_PIN_3
+#define W_CLK_GPIO_Port GPIOA
+#define DATA_Pin GPIO_PIN_2
+#define DATA_GPIO_Port GPIOA
+#define FU_UD_Pin GPIO_PIN_10
+#define FU_UD_GPIO_Port GPIOA
+#define RESET_Pin GPIO_PIN_3
+#define RESET_GPIO_Port GPIOB
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
