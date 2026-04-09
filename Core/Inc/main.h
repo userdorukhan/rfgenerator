@@ -66,17 +66,17 @@ void Error_Handler(void);
 #define SWCLK_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
-#define AD9851_W_CLK_Pin GPIO_PIN_3
-#define AD9851_W_CLK_GPIO_Port GPIOB
+#define AD9851_W_CLK_Pin GPIO_PIN_12
+#define AD9851_W_CLK_GPIO_Port GPIOG
 
-#define AD9851_FQ_UD_Pin GPIO_PIN_0
-#define AD9851_FQ_UD_GPIO_Port GPIOC
+#define AD9851_FQ_UD_Pin GPIO_PIN_9
+#define AD9851_FQ_UD_GPIO_Port GPIOE
 
-#define AD9851_DATA_Pin GPIO_PIN_10
-#define AD9851_DATA_GPIO_Port GPIOB
+#define AD9851_DATA_Pin GPIO_PIN_11
+#define AD9851_DATA_GPIO_Port GPIOE
 
-#define AD9851_RESET_Pin GPIO_PIN_1
-#define AD9851_RESET_GPIO_Port GPIOC
+#define AD9851_RESET_Pin GPIO_PIN_14
+#define AD9851_RESET_GPIO_Port GPIOE
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

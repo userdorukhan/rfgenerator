@@ -31,7 +31,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DDS_MIN_FREQUENCY_HZ        (0UL)
+#define DDS_MAX_FREQUENCY_HZ        (10000000UL)
+#define DDS_STATUS_INTERVAL_MS      (1000UL)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,6 +47,9 @@ COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
 AD9851_HandleTypeDef hdds;
+static volatile uint32_t dds_requested_frequency_hz = 1000000UL;
+static uint32_t dds_active_frequency_hz = 0UL;
+static uint32_t dds_last_status_tick_ms = 0UL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -52,7 +57,7 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void DDS_ApplyFrequency(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -110,16 +115,6 @@ int main(void)
 
   AD9851_Init(&hdds);
   HAL_Delay(10);
-  AD9851_SetFrequency(&hdds, 10000000U);
-  /* USER CODE END 2 */
-
-  /* Initialize leds */
-  BSP_LED_Init(LED_GREEN);
-  BSP_LED_Init(LED_YELLOW);
-  BSP_LED_Init(LED_RED);
-
-  /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
-  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
@@ -131,6 +126,22 @@ int main(void)
   {
     Error_Handler();
   }
+#if (USE_COM_LOG > 0)
+  BSP_COM_SelectLogPort(COM1);
+#endif
+
+  printf("\r\nDDS console ready. Update dds_requested_frequency_hz (DC..10 MHz) to retune the generator.\r\n");
+  DDS_ApplyFrequency();
+  dds_last_status_tick_ms = HAL_GetTick();
+  /* USER CODE END 2 */
+
+  /* Initialize leds */
+  BSP_LED_Init(LED_GREEN);
+  BSP_LED_Init(LED_YELLOW);
+  BSP_LED_Init(LED_RED);
+
+  /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
+  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -140,6 +151,18 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (dds_active_frequency_hz != dds_requested_frequency_hz)
+    {
+      DDS_ApplyFrequency();
+      dds_last_status_tick_ms = HAL_GetTick();
+    }
+
+    if ((HAL_GetTick() - dds_last_status_tick_ms) >= DDS_STATUS_INTERVAL_MS)
+    {
+      printf("[DDS] Holding %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
+      dds_last_status_tick_ms = HAL_GetTick();
+    }
+
     BSP_LED_Toggle(LED_GREEN);
     HAL_Delay(500);
   }
@@ -218,27 +241,30 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3|GPIO_PIN_10, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0|GPIO_PIN_1, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_14, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : PB3 PB10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_10;
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_12, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PE9 PE11 PE14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_14;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC0 PC1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
+  /*Configure GPIO pin : PG12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -246,6 +272,24 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void DDS_ApplyFrequency(void)
+{
+  uint32_t requested = dds_requested_frequency_hz;
+
+  if (requested > DDS_MAX_FREQUENCY_HZ)
+  {
+    requested = DDS_MAX_FREQUENCY_HZ;
+  }
+  else if (requested < DDS_MIN_FREQUENCY_HZ)
+  {
+    requested = DDS_MIN_FREQUENCY_HZ;
+  }
+
+  AD9851_SetFrequency(&hdds, requested);
+  dds_active_frequency_hz = requested;
+
+  printf("[DDS] Applied %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
+}
 
 /* USER CODE END 4 */
 
