@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <stdlib.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -33,7 +35,8 @@
 /* USER CODE BEGIN PD */
 #define DDS_MIN_FREQUENCY_HZ        (0UL)
 #define DDS_MAX_FREQUENCY_HZ        (10000000UL)
-#define DDS_STATUS_INTERVAL_MS      (1000UL)
+#define DDS_COMMAND_BUFFER_SIZE     (32U)
+#define DDS_COMMAND_IDLE_TIMEOUT_MS (250UL)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,9 +50,14 @@ COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
 AD9851_HandleTypeDef hdds;
-static volatile uint32_t dds_requested_frequency_hz = 1000000UL;
+static volatile uint32_t dds_requested_frequency_hz = 7700000UL;
 static uint32_t dds_active_frequency_hz = 0UL;
-static uint32_t dds_last_status_tick_ms = 0UL;
+static char dds_command_buffer[DDS_COMMAND_BUFFER_SIZE];
+static uint32_t dds_command_length = 0UL;
+static volatile uint8_t dds_command_ready = 0U;
+static volatile uint8_t dds_command_overflow = 0U;
+static uint8_t dds_console_rx_byte = 0U;
+static uint32_t dds_last_command_byte_tick = 0UL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,6 +66,8 @@ static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 static void DDS_ApplyFrequency(void);
+static void Console_StartRx(void);
+static void Console_ProcessCommand(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -126,13 +136,17 @@ int main(void)
   {
     Error_Handler();
   }
+  /* Enable USART3 interrupt in NVIC so HAL_UART_Receive_IT callbacks fire */
+  HAL_NVIC_SetPriority(USART3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART3_IRQn);
 #if (USE_COM_LOG > 0)
   BSP_COM_SelectLogPort(COM1);
 #endif
 
   printf("\r\nDDS console ready. Update dds_requested_frequency_hz (DC..10 MHz) to retune the generator.\r\n");
+  printf("Type a frequency in Hz and press Enter (e.g. 2500000). Type 'status' to query the current output.\r\n");
+  Console_StartRx();
   DDS_ApplyFrequency();
-  dds_last_status_tick_ms = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Initialize leds */
@@ -151,16 +165,26 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (dds_command_overflow != 0U)
+    {
+      dds_command_overflow = 0U;
+      printf("\r\n[DDS] Command too long. Clearing buffer.\r\n");
+    }
+
+    if (dds_command_ready != 0U)
+    {
+      Console_ProcessCommand();
+    }
+    else if ((dds_command_length > 0U) &&
+             ((HAL_GetTick() - dds_last_command_byte_tick) >= DDS_COMMAND_IDLE_TIMEOUT_MS))
+    {
+      dds_command_ready = 1U;
+      Console_ProcessCommand();
+    }
+
     if (dds_active_frequency_hz != dds_requested_frequency_hz)
     {
       DDS_ApplyFrequency();
-      dds_last_status_tick_ms = HAL_GetTick();
-    }
-
-    if ((HAL_GetTick() - dds_last_status_tick_ms) >= DDS_STATUS_INTERVAL_MS)
-    {
-      printf("[DDS] Holding %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
-      dds_last_status_tick_ms = HAL_GetTick();
     }
 
     BSP_LED_Toggle(LED_GREEN);
@@ -272,6 +296,56 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void Console_StartRx(void)
+{
+  HAL_UART_Receive_IT(&hcom_uart[COM1], &dds_console_rx_byte, 1);
+  dds_last_command_byte_tick = HAL_GetTick();
+}
+
+static void Console_ProcessCommand(void)
+{
+  char command[DDS_COMMAND_BUFFER_SIZE];
+
+  memcpy(command, dds_command_buffer, dds_command_length);
+  command[dds_command_length] = '\0';
+
+  dds_command_length = 0U;
+  dds_command_ready = 0U;
+  dds_last_command_byte_tick = HAL_GetTick();
+
+  if (command[0] == '\0')
+  {
+    return;
+  }
+
+  printf("[DDS] Acknowledged \"%s\"\r\n", command);
+
+  if (strcmp(command, "status") == 0)
+  {
+    printf("[DDS] Requested %lu Hz, active %lu Hz\r\n",
+           (unsigned long)dds_requested_frequency_hz,
+           (unsigned long)dds_active_frequency_hz);
+    return;
+  }
+
+  char *endptr = NULL;
+  unsigned long value = strtoul(command, &endptr, 10);
+
+  if ((endptr == command) || (*endptr != '\0'))
+  {
+    printf("[DDS] Invalid command '%s'\r\n", command);
+    return;
+  }
+
+  if (value > UINT32_MAX)
+  {
+    value = UINT32_MAX;
+  }
+
+  dds_requested_frequency_hz = (uint32_t)value;
+  printf("[DDS] Requesting %lu Hz\r\n", value);
+}
+
 static void DDS_ApplyFrequency(void)
 {
   uint32_t requested = dds_requested_frequency_hz;
@@ -289,6 +363,44 @@ static void DDS_ApplyFrequency(void)
   dds_active_frequency_hz = requested;
 
   printf("[DDS] Applied %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &hcom_uart[COM1])
+  {
+    uint8_t byte = dds_console_rx_byte;
+
+    if (dds_command_ready != 0U)
+    {
+      HAL_UART_Receive_IT(huart, &dds_console_rx_byte, 1);
+      return;
+    }
+
+    dds_last_command_byte_tick = HAL_GetTick();
+
+    if ((byte == '\r') || (byte == '\n'))
+    {
+      if (dds_command_length > 0U)
+      {
+        dds_command_ready = 1U;
+      }
+    }
+    else
+    {
+      if (dds_command_length < (DDS_COMMAND_BUFFER_SIZE - 1U))
+      {
+        dds_command_buffer[dds_command_length++] = (char)byte;
+      }
+      else
+      {
+        dds_command_length = 0U;
+        dds_command_overflow = 1U;
+      }
+    }
+
+    HAL_UART_Receive_IT(huart, &dds_console_rx_byte, 1);
+  }
 }
 
 /* USER CODE END 4 */
