@@ -328,22 +328,57 @@ static void Console_ProcessCommand(void)
     return;
   }
 
+  /* Parse numeric part (supports decimals, e.g. 7.7) */
   char *endptr = NULL;
-  unsigned long value = strtoul(command, &endptr, 10);
+  double value_d = strtod(command, &endptr);
 
-  if ((endptr == command) || (*endptr != '\0'))
+  if (endptr == command)
   {
     printf("[DDS] Invalid command '%s'\r\n", command);
     return;
   }
 
-  if (value > UINT32_MAX)
+  /* Skip optional whitespace between number and unit */
+  while (*endptr == ' ') { endptr++; }
+
+  /* Parse optional unit suffix (case-insensitive) */
+  double multiplier = 1.0;
+  char u0 = (char)((*endptr >= 'a') ? *endptr - 32 : *endptr);         /* uppercase first char  */
+  char u1 = (char)((endptr[1] >= 'a') ? endptr[1] - 32 : endptr[1]);   /* uppercase second char */
+  char u2 = (char)((endptr[2] >= 'a') ? endptr[2] - 32 : endptr[2]);   /* uppercase third char  */
+
+  if (u0 == 'M' && u1 == 'H' && u2 == 'Z' && endptr[3] == '\0')
   {
-    value = UINT32_MAX;
+    multiplier = 1000000.0; endptr += 3;
+  }
+  else if (u0 == 'M' && endptr[1] == '\0')
+  {
+    multiplier = 1000000.0; endptr += 1;
+  }
+  else if (u0 == 'K' && u1 == 'H' && u2 == 'Z' && endptr[3] == '\0')
+  {
+    multiplier = 1000.0; endptr += 3;
+  }
+  else if (u0 == 'K' && endptr[1] == '\0')
+  {
+    multiplier = 1000.0; endptr += 1;
+  }
+  else if (u0 == 'H' && u1 == 'Z' && endptr[2] == '\0')
+  {
+    /* explicit Hz — no scaling */ endptr += 2;
+  }
+  else if (*endptr != '\0')
+  {
+    printf("[DDS] Unknown unit in '%s'. Use Hz, kHz, or MHz.\r\n", command);
+    return;
   }
 
-  dds_requested_frequency_hz = (uint32_t)value;
-  printf("[DDS] Requesting %lu Hz\r\n", value);
+  double scaled = value_d * multiplier + 0.5;
+  if (scaled < 0.0)                   { scaled = 0.0; }
+  if (scaled > (double)UINT32_MAX)    { scaled = (double)UINT32_MAX; }
+
+  dds_requested_frequency_hz = (uint32_t)scaled;
+  printf("[DDS] Requesting %lu Hz\r\n", (unsigned long)dds_requested_frequency_hz);
 }
 
 static void DDS_ApplyFrequency(void)
