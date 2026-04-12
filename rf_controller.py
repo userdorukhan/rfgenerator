@@ -40,13 +40,14 @@ class RFGeneratorApp(ctk.CTk):
         super().__init__()
 
         self.title("RF Generator Controller")
-        self.geometry("640x740")
+        self.geometry("640x900")
         self.resizable(False, False)
 
         self._serial: serial.Serial | None = None
         self._read_thread: threading.Thread | None = None
         self._running = False
         self._slider_debounce_id = None
+        self._amp_debounce_id = None
 
         self._build_ui()
         self._refresh_ports()
@@ -55,7 +56,7 @@ class RFGeneratorApp(ctk.CTk):
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
 
         # ── Connection ────────────────────────────────────────────────────
         conn = ctk.CTkFrame(self, corner_radius=12)
@@ -165,9 +166,69 @@ class RFGeneratorApp(ctk.CTk):
                 command=lambda f=hz: self._apply_preset(f)
             ).pack(side="left", padx=3)
 
+        # ── Amplitude ─────────────────────────────────────────────────────
+        amp_frame = ctk.CTkFrame(self, corner_radius=12)
+        amp_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=8)
+        amp_frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(amp_frame, text="Output Amplitude",
+                     font=ctk.CTkFont(size=13, weight="bold")).grid(
+            row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+
+        self._amp_display = ctk.CTkLabel(
+            amp_frame, text="100 %",
+            font=ctk.CTkFont(size=42, weight="bold"),
+            text_color="#81c784")
+        self._amp_display.grid(row=1, column=0, pady=6)
+
+        self._amp_var = DoubleVar(value=100)
+        self._amp_slider = ctk.CTkSlider(
+            amp_frame, from_=0, to=100,
+            variable=self._amp_var,
+            command=self._on_amp_slider_move)
+        self._amp_slider.grid(row=2, column=0, sticky="ew", padx=24, pady=(4, 2))
+
+        amp_bounds = ctk.CTkFrame(amp_frame, fg_color="transparent")
+        amp_bounds.grid(row=3, column=0, sticky="ew", padx=24)
+        ctk.CTkLabel(amp_bounds, text="0 %",
+                     font=ctk.CTkFont(size=11), text_color="#9e9e9e").pack(side="left")
+        ctk.CTkLabel(amp_bounds, text="100 %",
+                     font=ctk.CTkFont(size=11), text_color="#9e9e9e").pack(side="right")
+
+        amp_entry_row = ctk.CTkFrame(amp_frame, fg_color="transparent")
+        amp_entry_row.grid(row=4, column=0, pady=(14, 6), padx=16, sticky="ew")
+
+        self._amp_entry = ctk.CTkEntry(
+            amp_entry_row, placeholder_text="0 – 100",
+            width=130, height=38,
+            font=ctk.CTkFont(size=15))
+        self._amp_entry.pack(side="left", padx=(0, 8))
+        self._amp_entry.bind("<Return>", lambda _e: self._send_from_amp_entry())
+
+        ctk.CTkLabel(amp_entry_row, text="%",
+                     font=ctk.CTkFont(size=18)).pack(side="left", padx=(0, 12))
+
+        ctk.CTkButton(amp_entry_row, text="Set Amplitude", height=38, width=150,
+                      command=self._send_from_amp_entry).pack(side="left")
+
+        amp_presets_row = ctk.CTkFrame(amp_frame, fg_color="transparent")
+        amp_presets_row.grid(row=5, column=0, pady=(8, 16), padx=16, sticky="w")
+
+        ctk.CTkLabel(amp_presets_row, text="Presets:",
+                     font=ctk.CTkFont(size=12),
+                     text_color="#9e9e9e").pack(side="left", padx=(0, 8))
+
+        for label, pct in [("25 %", 25), ("50 %", 50), ("75 %", 75), ("100 %", 100)]:
+            ctk.CTkButton(
+                amp_presets_row, text=label, width=76, height=30,
+                font=ctk.CTkFont(size=12),
+                fg_color="#1a3a2a", hover_color="#0d2e1a",
+                command=lambda p=pct: self._apply_amp_preset(p)
+            ).pack(side="left", padx=3)
+
         # ── Console ───────────────────────────────────────────────────────
         console_frame = ctk.CTkFrame(self, corner_radius=12)
-        console_frame.grid(row=3, column=0, sticky="nsew", padx=20, pady=(8, 20))
+        console_frame.grid(row=4, column=0, sticky="nsew", padx=20, pady=(8, 20))
         console_frame.grid_rowconfigure(1, weight=1)
         console_frame.grid_columnconfigure(0, weight=1)
 
@@ -280,6 +341,45 @@ class RFGeneratorApp(ctk.CTk):
         self._slider_var.set(hz)
         self._freq_display.configure(text=hz_to_display(hz))
         self._send_command(hz)
+
+    def _send_from_amp_entry(self):
+        text = self._amp_entry.get().strip()
+        if not text:
+            return
+        try:
+            value = float(text)
+        except ValueError:
+            self._log(f"[ERR] '{text}' is not a valid number.")
+            return
+        pct = max(0, min(100, int(round(value))))
+        self._apply_amplitude(pct)
+
+    def _apply_amp_preset(self, pct: int):
+        self._apply_amplitude(pct)
+
+    def _on_amp_slider_move(self, value):
+        pct = int(round(float(value)))
+        self._amp_display.configure(text=f"{pct} %")
+        if self._amp_debounce_id is not None:
+            self.after_cancel(self._amp_debounce_id)
+        self._amp_debounce_id = self.after(
+            120, lambda: self._send_amp_command(pct))
+
+    def _apply_amplitude(self, pct: int):
+        self._amp_var.set(pct)
+        self._amp_display.configure(text=f"{pct} %")
+        self._send_amp_command(pct)
+
+    def _send_amp_command(self, pct: int):
+        cmd = f"amp {pct}\r\n"
+        if self._serial and self._serial.is_open:
+            try:
+                self._serial.write(cmd.encode())
+                self._log(f"> amp {pct}%")
+            except Exception as exc:
+                self._log(f"[ERR] Send failed: {exc}")
+        else:
+            self._log("[WARN] Not connected — command not sent.")
 
     def _send_command(self, hz: float):
         cmd = hz_to_command(hz)
