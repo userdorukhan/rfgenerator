@@ -37,6 +37,8 @@
 #define DDS_MAX_FREQUENCY_HZ        (10000000UL)
 #define DDS_COMMAND_BUFFER_SIZE     (32U)
 #define DDS_COMMAND_IDLE_TIMEOUT_MS (250UL)
+#define DDS_MIN_AMPLITUDE_PCT       (0U)
+#define DDS_MAX_AMPLITUDE_PCT       (100U)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,6 +54,8 @@ COM_InitTypeDef BspCOMInit;
 AD9851_HandleTypeDef hdds;
 static volatile uint32_t dds_requested_frequency_hz = 7700000UL;
 static uint32_t dds_active_frequency_hz = 0UL;
+static volatile uint8_t dds_requested_amplitude_pct = 100U;
+static uint8_t dds_active_amplitude_pct = 255U; /* 255 = uninitialised, forces first apply */
 static char dds_command_buffer[DDS_COMMAND_BUFFER_SIZE];
 static uint32_t dds_command_length = 0UL;
 static volatile uint8_t dds_command_ready = 0U;
@@ -66,6 +70,8 @@ static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 static void DDS_ApplyFrequency(void);
+static void DAC_Init(void);
+static void DAC_SetAmplitude(uint8_t pct);
 static void Console_StartRx(void);
 static void Console_ProcessCommand(void);
 /* USER CODE END PFP */
@@ -125,6 +131,7 @@ int main(void)
 
   AD9851_Init(&hdds);
   HAL_Delay(10);
+  DAC_Init();
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
@@ -185,6 +192,13 @@ int main(void)
     if (dds_active_frequency_hz != dds_requested_frequency_hz)
     {
       DDS_ApplyFrequency();
+    }
+
+    if (dds_active_amplitude_pct != dds_requested_amplitude_pct)
+    {
+      dds_active_amplitude_pct = dds_requested_amplitude_pct;
+      DAC_SetAmplitude(dds_active_amplitude_pct);
+      printf("[AMP] Applied %u%%\r\n", (unsigned)dds_active_amplitude_pct);
     }
 
     BSP_LED_Toggle(LED_GREEN);
@@ -325,6 +339,25 @@ static void Console_ProcessCommand(void)
     printf("[DDS] Requested %lu Hz, active %lu Hz\r\n",
            (unsigned long)dds_requested_frequency_hz,
            (unsigned long)dds_active_frequency_hz);
+    printf("[AMP] Requested %u%%, active %u%%\r\n",
+           (unsigned)dds_requested_amplitude_pct,
+           (unsigned)dds_active_amplitude_pct);
+    return;
+  }
+
+  /* "amp X" — set amplitude 0-100 % */
+  if (strncmp(command, "amp ", 4) == 0)
+  {
+    char *ampptr = NULL;
+    unsigned long pct = strtoul(command + 4, &ampptr, 10);
+    if ((ampptr == command + 4) || (*ampptr != '\0'))
+    {
+      printf("[AMP] Invalid value '%s'. Use: amp 0..100\r\n", command + 4);
+      return;
+    }
+    if (pct > DDS_MAX_AMPLITUDE_PCT) { pct = DDS_MAX_AMPLITUDE_PCT; }
+    dds_requested_amplitude_pct = (uint8_t)pct;
+    printf("[AMP] Requesting %lu%%\r\n", pct);
     return;
   }
 
@@ -398,6 +431,30 @@ static void DDS_ApplyFrequency(void)
   dds_active_frequency_hz = requested;
 
   printf("[DDS] Applied %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
+}
+
+static void DAC_Init(void)
+{
+  /* Enable DAC12 clock on APB1L */
+  RCC->APB1LENR |= RCC_APB1LENR_DAC12EN;
+  __DSB();
+
+  /* PA4 = DAC1_OUT1: set to analog mode (MODER bits [9:8] = 11) */
+  GPIOA->MODER |= (0x3UL << (4U * 2U));
+
+  /* DAC1 CH1: no trigger, output buffer enabled, channel ON */
+  DAC1->CR &= ~(DAC_CR_TEN1 | DAC_CR_EN1);
+  DAC1->CR |= DAC_CR_EN1;
+
+  /* Start at 100 % */
+  DAC1->DHR12R1 = 4095U;
+}
+
+static void DAC_SetAmplitude(uint8_t pct)
+{
+  /* Map 0-100 % → 0-4095 (12-bit DAC, right-aligned) */
+  uint32_t val = ((uint32_t)pct * 4095U) / 100U;
+  DAC1->DHR12R1 = val;
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
