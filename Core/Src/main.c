@@ -18,10 +18,12 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include <stdlib.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ad9851.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +33,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define DDS_MIN_FREQUENCY_HZ        (0UL)
+#define DDS_MAX_FREQUENCY_HZ        (10000000UL)
+#define DDS_COMMAND_BUFFER_SIZE     (32U)
+#define DDS_COMMAND_IDLE_TIMEOUT_MS (250UL)
+#define DDS_MIN_AMPLITUDE_PCT       (0U)
+#define DDS_MAX_AMPLITUDE_PCT       (100U)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,10 +49,19 @@
 /* Private variables ---------------------------------------------------------*/
 
 COM_InitTypeDef BspCOMInit;
-__IO uint32_t BspButtonState = BUTTON_RELEASED;
 
 /* USER CODE BEGIN PV */
-
+AD9851_HandleTypeDef hdds;
+static volatile uint32_t dds_requested_frequency_hz = 7700000UL;
+static uint32_t dds_active_frequency_hz = 0UL;
+static volatile uint8_t dds_requested_amplitude_pct = 100U;
+static uint8_t dds_active_amplitude_pct = 255U; /* 255 = uninitialised, forces first apply */
+static char dds_command_buffer[DDS_COMMAND_BUFFER_SIZE];
+static uint32_t dds_command_length = 0UL;
+static volatile uint8_t dds_command_ready = 0U;
+static volatile uint8_t dds_command_overflow = 0U;
+static uint8_t dds_console_rx_byte = 0U;
+static uint32_t dds_last_command_byte_tick = 0UL;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -53,7 +69,11 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void DDS_ApplyFrequency(void);
+static void DAC_Init(void);
+static void DAC_SetAmplitude(uint8_t pct);
+static void Console_StartRx(void);
+static void Console_ProcessCommand(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -94,16 +114,24 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
+  hdds.W_CLK_Port = AD9851_W_CLK_GPIO_Port;
+  hdds.W_CLK_Pin = AD9851_W_CLK_Pin;
 
-  /* USER CODE END 2 */
+  hdds.FQ_UD_Port = AD9851_FQ_UD_GPIO_Port;
+  hdds.FQ_UD_Pin = AD9851_FQ_UD_Pin;
 
-  /* Initialize leds */
-  BSP_LED_Init(LED_GREEN);
-  BSP_LED_Init(LED_YELLOW);
-  BSP_LED_Init(LED_RED);
+  hdds.DATA_Port = AD9851_DATA_GPIO_Port;
+  hdds.DATA_Pin = AD9851_DATA_Pin;
 
-  /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
-  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
+  hdds.RESET_Port = AD9851_RESET_GPIO_Port;
+  hdds.RESET_Pin = AD9851_RESET_Pin;
+
+  hdds.reference_clock_hz = 30000000U;
+  hdds.enable_x6_multiplier = 1U;
+
+  AD9851_Init(&hdds);
+  HAL_Delay(10);
+  DAC_Init();
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
@@ -115,39 +143,66 @@ int main(void)
   {
     Error_Handler();
   }
+  /* Enable USART3 interrupt in NVIC so HAL_UART_Receive_IT callbacks fire */
+  HAL_NVIC_SetPriority(USART3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART3_IRQn);
+#if (USE_COM_LOG > 0)
+  BSP_COM_SelectLogPort(COM1);
+#endif
 
-  /* USER CODE BEGIN BSP */
+  printf("\r\nDDS console ready. Update dds_requested_frequency_hz (DC..10 MHz) to retune the generator.\r\n");
+  printf("Type a frequency in Hz and press Enter (e.g. 2500000). Type 'status' to query the current output.\r\n");
+  Console_StartRx();
+  DDS_ApplyFrequency();
+  /* USER CODE END 2 */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
+  /* Initialize leds */
+  BSP_LED_Init(LED_GREEN);
+  BSP_LED_Init(LED_YELLOW);
+  BSP_LED_Init(LED_RED);
 
-  /* -- Sample board code to switch on leds ---- */
-  BSP_LED_On(LED_GREEN);
-  BSP_LED_On(LED_YELLOW);
-  BSP_LED_On(LED_RED);
-
-  /* USER CODE END BSP */
+  /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
+  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
 
-    /* -- Sample board code for User push-button in interrupt mode ---- */
-    if (BspButtonState == BUTTON_PRESSED)
-    {
-      /* Update button state */
-      BspButtonState = BUTTON_RELEASED;
-      /* -- Sample board code to toggle leds ---- */
-      BSP_LED_Toggle(LED_GREEN);
-      BSP_LED_Toggle(LED_YELLOW);
-      BSP_LED_Toggle(LED_RED);
-
-      /* ..... Perform your action ..... */
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    if (dds_command_overflow != 0U)
+    {
+      dds_command_overflow = 0U;
+      printf("\r\n[DDS] Command too long. Clearing buffer.\r\n");
+    }
+
+    if (dds_command_ready != 0U)
+    {
+      Console_ProcessCommand();
+    }
+    else if ((dds_command_length > 0U) &&
+             ((HAL_GetTick() - dds_last_command_byte_tick) >= DDS_COMMAND_IDLE_TIMEOUT_MS))
+    {
+      dds_command_ready = 1U;
+      Console_ProcessCommand();
+    }
+
+    if (dds_active_frequency_hz != dds_requested_frequency_hz)
+    {
+      DDS_ApplyFrequency();
+    }
+
+    if (dds_active_amplitude_pct != dds_requested_amplitude_pct)
+    {
+      dds_active_amplitude_pct = dds_requested_amplitude_pct;
+      DAC_SetAmplitude(dds_active_amplitude_pct);
+      printf("[AMP] Applied %u%%\r\n", (unsigned)dds_active_amplitude_pct);
+    }
+
+    BSP_LED_Toggle(LED_GREEN);
+    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -218,13 +273,36 @@ void SystemClock_Config(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_14, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_12, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PE9 PE11 PE14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_11|GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PG12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -232,6 +310,190 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void Console_StartRx(void)
+{
+  HAL_UART_Receive_IT(&hcom_uart[COM1], &dds_console_rx_byte, 1);
+  dds_last_command_byte_tick = HAL_GetTick();
+}
+
+static void Console_ProcessCommand(void)
+{
+  char command[DDS_COMMAND_BUFFER_SIZE];
+
+  memcpy(command, dds_command_buffer, dds_command_length);
+  command[dds_command_length] = '\0';
+
+  dds_command_length = 0U;
+  dds_command_ready = 0U;
+  dds_last_command_byte_tick = HAL_GetTick();
+
+  if (command[0] == '\0')
+  {
+    return;
+  }
+
+  printf("[DDS] Acknowledged \"%s\"\r\n", command);
+
+  if (strcmp(command, "status") == 0)
+  {
+    printf("[DDS] Requested %lu Hz, active %lu Hz\r\n",
+           (unsigned long)dds_requested_frequency_hz,
+           (unsigned long)dds_active_frequency_hz);
+    printf("[AMP] Requested %u%%, active %u%%\r\n",
+           (unsigned)dds_requested_amplitude_pct,
+           (unsigned)dds_active_amplitude_pct);
+    return;
+  }
+
+  /* "amp X" — set amplitude 0-100 % */
+  if (strncmp(command, "amp ", 4) == 0)
+  {
+    char *ampptr = NULL;
+    unsigned long pct = strtoul(command + 4, &ampptr, 10);
+    if ((ampptr == command + 4) || (*ampptr != '\0'))
+    {
+      printf("[AMP] Invalid value '%s'. Use: amp 0..100\r\n", command + 4);
+      return;
+    }
+    if (pct > DDS_MAX_AMPLITUDE_PCT) { pct = DDS_MAX_AMPLITUDE_PCT; }
+    dds_requested_amplitude_pct = (uint8_t)pct;
+    printf("[AMP] Requesting %lu%%\r\n", pct);
+    return;
+  }
+
+  /* Parse numeric part (supports decimals, e.g. 7.7) */
+  char *endptr = NULL;
+  double value_d = strtod(command, &endptr);
+
+  if (endptr == command)
+  {
+    printf("[DDS] Invalid command '%s'\r\n", command);
+    return;
+  }
+
+  /* Skip optional whitespace between number and unit */
+  while (*endptr == ' ') { endptr++; }
+
+  /* Parse optional unit suffix (case-insensitive) */
+  double multiplier = 1.0;
+  char u0 = (char)((*endptr >= 'a') ? *endptr - 32 : *endptr);         /* uppercase first char  */
+  char u1 = (char)((endptr[1] >= 'a') ? endptr[1] - 32 : endptr[1]);   /* uppercase second char */
+  char u2 = (char)((endptr[2] >= 'a') ? endptr[2] - 32 : endptr[2]);   /* uppercase third char  */
+
+  if (u0 == 'M' && u1 == 'H' && u2 == 'Z' && endptr[3] == '\0')
+  {
+    multiplier = 1000000.0; endptr += 3;
+  }
+  else if (u0 == 'M' && endptr[1] == '\0')
+  {
+    multiplier = 1000000.0; endptr += 1;
+  }
+  else if (u0 == 'K' && u1 == 'H' && u2 == 'Z' && endptr[3] == '\0')
+  {
+    multiplier = 1000.0; endptr += 3;
+  }
+  else if (u0 == 'K' && endptr[1] == '\0')
+  {
+    multiplier = 1000.0; endptr += 1;
+  }
+  else if (u0 == 'H' && u1 == 'Z' && endptr[2] == '\0')
+  {
+    /* explicit Hz — no scaling */ endptr += 2;
+  }
+  else if (*endptr != '\0')
+  {
+    printf("[DDS] Unknown unit in '%s'. Use Hz, kHz, or MHz.\r\n", command);
+    return;
+  }
+
+  double scaled = value_d * multiplier + 0.5;
+  if (scaled < 0.0)                   { scaled = 0.0; }
+  if (scaled > (double)UINT32_MAX)    { scaled = (double)UINT32_MAX; }
+
+  dds_requested_frequency_hz = (uint32_t)scaled;
+  printf("[DDS] Requesting %lu Hz\r\n", (unsigned long)dds_requested_frequency_hz);
+}
+
+static void DDS_ApplyFrequency(void)
+{
+  uint32_t requested = dds_requested_frequency_hz;
+
+  if (requested > DDS_MAX_FREQUENCY_HZ)
+  {
+    requested = DDS_MAX_FREQUENCY_HZ;
+  }
+  else if (requested < DDS_MIN_FREQUENCY_HZ)
+  {
+    requested = DDS_MIN_FREQUENCY_HZ;
+  }
+
+  AD9851_SetFrequency(&hdds, requested);
+  dds_active_frequency_hz = requested;
+
+  printf("[DDS] Applied %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
+}
+
+static void DAC_Init(void)
+{
+  /* Enable DAC12 clock on APB1L */
+  RCC->APB1LENR |= RCC_APB1LENR_DAC12EN;
+  __DSB();
+
+  /* PA4 = DAC1_OUT1: set to analog mode (MODER bits [9:8] = 11) */
+  GPIOA->MODER |= (0x3UL << (4U * 2U));
+
+  /* DAC1 CH1: no trigger, output buffer enabled, channel ON */
+  DAC1->CR &= ~(DAC_CR_TEN1 | DAC_CR_EN1);
+  DAC1->CR |= DAC_CR_EN1;
+
+  /* Start at 100 % */
+  DAC1->DHR12R1 = 4095U;
+}
+
+static void DAC_SetAmplitude(uint8_t pct)
+{
+  /* Map 0-100 % → 0-4095 (12-bit DAC, right-aligned) */
+  uint32_t val = ((uint32_t)pct * 4095U) / 100U;
+  DAC1->DHR12R1 = val;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart == &hcom_uart[COM1])
+  {
+    uint8_t byte = dds_console_rx_byte;
+
+    if (dds_command_ready != 0U)
+    {
+      HAL_UART_Receive_IT(huart, &dds_console_rx_byte, 1);
+      return;
+    }
+
+    dds_last_command_byte_tick = HAL_GetTick();
+
+    if ((byte == '\r') || (byte == '\n'))
+    {
+      if (dds_command_length > 0U)
+      {
+        dds_command_ready = 1U;
+      }
+    }
+    else
+    {
+      if (dds_command_length < (DDS_COMMAND_BUFFER_SIZE - 1U))
+      {
+        dds_command_buffer[dds_command_length++] = (char)byte;
+      }
+      else
+      {
+        dds_command_length = 0U;
+        dds_command_overflow = 1U;
+      }
+    }
+
+    HAL_UART_Receive_IT(huart, &dds_console_rx_byte, 1);
+  }
+}
 
 /* USER CODE END 4 */
 
@@ -262,19 +524,6 @@ void MPU_Config(void)
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 
-}
-
-/**
-  * @brief BSP Push Button callback
-  * @param Button Specifies the pressed button
-  * @retval None
-  */
-void BSP_PB_Callback(Button_TypeDef Button)
-{
-  if (Button == BUTTON_USER)
-  {
-    BspButtonState = BUTTON_PRESSED;
-  }
 }
 
 /**

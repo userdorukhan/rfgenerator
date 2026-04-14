@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file         stm32h7xx_hal_msp.c
-  * @brief        This file provides code for the MSP Initialization 
+  * @brief        This file provides code for the MSP Initialization
   *               and de-Initialization codes.
   ******************************************************************************
   * @attention
@@ -30,7 +30,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN Define */
- 
+
 /* USER CODE END Define */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,21 +57,22 @@
 
 /* USER CODE END 0 */
 /**
-#t* Initializes the Global MSP.
-#t*/
+  * Initializes the Global MSP.
+  */
 void HAL_MspInit(void)
 {
 
-/* USER CODE BEGIN MspInit 0 */
+  /* USER CODE BEGIN MspInit 0 */
 
-/* USER CODE END MspInit 0 */
+  /* USER CODE END MspInit 0 */
 
-__HAL_RCC_SYSCFG_CLK_ENABLE();
+  __HAL_RCC_SYSCFG_CLK_ENABLE();
 
-/* System interrupt init*/
+  /* System interrupt init*/
 
-/* USER CODE BEGIN MspInit 1 */
-/* USER CODE END MspInit 1 */
+  /* USER CODE BEGIN MspInit 1 */
+
+  /* USER CODE END MspInit 1 */
 }
 
 /* USER CODE BEGIN 1 */

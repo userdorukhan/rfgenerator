@@ -213,5 +213,12 @@ void EXTI15_10_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+#if (USE_BSP_COM_FEATURE > 0)
+extern UART_HandleTypeDef hcom_uart[];
 
+void USART3_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&hcom_uart[COM1]);
+}
+#endif
 /* USER CODE END 1 */
