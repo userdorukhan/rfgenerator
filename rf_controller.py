@@ -166,64 +166,84 @@ class RFGeneratorApp(ctk.CTk):
                 command=lambda f=hz: self._apply_preset(f)
             ).pack(side="left", padx=3)
 
-        # ── Amplitude ─────────────────────────────────────────────────────
-        amp_frame = ctk.CTkFrame(self, corner_radius=12)
-        amp_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=8)
-        amp_frame.grid_columnconfigure(0, weight=1)
+        # ── Gain (AD603 VGA) ──────────────────────────────────────────────
+        gain_frame = ctk.CTkFrame(self, corner_radius=12)
+        gain_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=8)
+        gain_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(amp_frame, text="Output Amplitude",
-                     font=ctk.CTkFont(size=13, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+        header_row = ctk.CTkFrame(gain_frame, fg_color="transparent")
+        header_row.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 4))
+        ctk.CTkLabel(header_row, text="VGA Gain (AD603)",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        ctk.CTkLabel(header_row, text="0 V → 0 dB     1 V → 80 dB     (HARD CAP 1.0 V)",
+                     font=ctk.CTkFont(size=11),
+                     text_color="#9e9e9e").pack(side="right")
 
-        self._amp_display = ctk.CTkLabel(
-            amp_frame, text="100 %",
+        self._gain_display = ctk.CTkLabel(
+            gain_frame, text="0.0 dB",
             font=ctk.CTkFont(size=42, weight="bold"),
             text_color="#81c784")
-        self._amp_display.grid(row=1, column=0, pady=6)
+        self._gain_display.grid(row=1, column=0, pady=(6, 0))
 
-        self._amp_var = DoubleVar(value=100)
-        self._amp_slider = ctk.CTkSlider(
-            amp_frame, from_=0, to=100,
-            variable=self._amp_var,
-            command=self._on_amp_slider_move)
-        self._amp_slider.grid(row=2, column=0, sticky="ew", padx=24, pady=(4, 2))
+        self._gain_subtext = ctk.CTkLabel(
+            gain_frame, text="Vctl = 0.000 V    ×1.0 V/V",
+            font=ctk.CTkFont(size=12),
+            text_color="#9e9e9e")
+        self._gain_subtext.grid(row=2, column=0, pady=(0, 8))
 
-        amp_bounds = ctk.CTkFrame(amp_frame, fg_color="transparent")
-        amp_bounds.grid(row=3, column=0, sticky="ew", padx=24)
-        ctk.CTkLabel(amp_bounds, text="0 %",
+        self._gain_var = DoubleVar(value=0.0)
+        self._gain_slider = ctk.CTkSlider(
+            gain_frame, from_=0.0, to=80.0,
+            variable=self._gain_var,
+            command=self._on_gain_slider_move)
+        self._gain_slider.grid(row=3, column=0, sticky="ew", padx=24, pady=(4, 2))
+
+        gain_bounds = ctk.CTkFrame(gain_frame, fg_color="transparent")
+        gain_bounds.grid(row=4, column=0, sticky="ew", padx=24)
+        ctk.CTkLabel(gain_bounds, text="0 dB",
                      font=ctk.CTkFont(size=11), text_color="#9e9e9e").pack(side="left")
-        ctk.CTkLabel(amp_bounds, text="100 %",
+        ctk.CTkLabel(gain_bounds, text="80 dB",
                      font=ctk.CTkFont(size=11), text_color="#9e9e9e").pack(side="right")
 
-        amp_entry_row = ctk.CTkFrame(amp_frame, fg_color="transparent")
-        amp_entry_row.grid(row=4, column=0, pady=(14, 6), padx=16, sticky="ew")
+        gain_entry_row = ctk.CTkFrame(gain_frame, fg_color="transparent")
+        gain_entry_row.grid(row=5, column=0, pady=(14, 6), padx=16, sticky="ew")
 
-        self._amp_entry = ctk.CTkEntry(
-            amp_entry_row, placeholder_text="0 – 100",
-            width=130, height=38,
+        self._gain_entry = ctk.CTkEntry(
+            gain_entry_row, placeholder_text="0 – 80",
+            width=110, height=38,
             font=ctk.CTkFont(size=15))
-        self._amp_entry.pack(side="left", padx=(0, 8))
-        self._amp_entry.bind("<Return>", lambda _e: self._send_from_amp_entry())
+        self._gain_entry.pack(side="left", padx=(0, 6))
+        self._gain_entry.bind("<Return>", lambda _e: self._send_from_gain_entry())
 
-        ctk.CTkLabel(amp_entry_row, text="%",
-                     font=ctk.CTkFont(size=18)).pack(side="left", padx=(0, 12))
+        ctk.CTkLabel(gain_entry_row, text="dB",
+                     font=ctk.CTkFont(size=15)).pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(amp_entry_row, text="Set Amplitude", height=38, width=150,
-                      command=self._send_from_amp_entry).pack(side="left")
+        ctk.CTkButton(gain_entry_row, text="Set Gain", height=38, width=110,
+                      command=self._send_from_gain_entry).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(gain_entry_row, text="Mute", height=38, width=80,
+                      fg_color="#b71c1c", hover_color="#7f0000",
+                      command=self._send_mute).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(gain_entry_row, text="Sweep", height=38, width=90,
+                      fg_color="#7b1fa2", hover_color="#4a148c",
+                      command=self._send_sweep).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(gain_entry_row, text="Calibrate…", height=38, width=110,
+                      fg_color="#37474f", hover_color="#263238",
+                      command=self._open_calibrate_dialog).pack(side="left")
 
-        amp_presets_row = ctk.CTkFrame(amp_frame, fg_color="transparent")
-        amp_presets_row.grid(row=5, column=0, pady=(8, 16), padx=16, sticky="w")
+        gain_presets_row = ctk.CTkFrame(gain_frame, fg_color="transparent")
+        gain_presets_row.grid(row=6, column=0, pady=(8, 16), padx=16, sticky="w")
 
-        ctk.CTkLabel(amp_presets_row, text="Presets:",
+        ctk.CTkLabel(gain_presets_row, text="Presets:",
                      font=ctk.CTkFont(size=12),
                      text_color="#9e9e9e").pack(side="left", padx=(0, 8))
 
-        for label, pct in [("25 %", 25), ("50 %", 50), ("75 %", 75), ("100 %", 100)]:
+        for label, db in [("0 dB", 0), ("20 dB", 20), ("40 dB", 40),
+                          ("60 dB", 60), ("80 dB", 80)]:
             ctk.CTkButton(
-                amp_presets_row, text=label, width=76, height=30,
+                gain_presets_row, text=label, width=76, height=30,
                 font=ctk.CTkFont(size=12),
                 fg_color="#1a3a2a", hover_color="#0d2e1a",
-                command=lambda p=pct: self._apply_amp_preset(p)
+                command=lambda d=db: self._apply_gain_preset(d)
             ).pack(side="left", padx=3)
 
         # ── Console ───────────────────────────────────────────────────────
@@ -247,7 +267,7 @@ class RFGeneratorApp(ctk.CTk):
         self._console.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
 
         self._log("RF Generator Controller ready.")
-        self._log("Connect to your board and set a frequency.")
+        self._log("AD603 boots muted. Set frequency, then ramp gain via slider/Sweep.")
 
     # ---------------------------------------------------------------- Serial -
 
@@ -342,8 +362,8 @@ class RFGeneratorApp(ctk.CTk):
         self._freq_display.configure(text=hz_to_display(hz))
         self._send_command(hz)
 
-    def _send_from_amp_entry(self):
-        text = self._amp_entry.get().strip()
+    def _send_from_gain_entry(self):
+        text = self._gain_entry.get().strip()
         if not text:
             return
         try:
@@ -351,31 +371,100 @@ class RFGeneratorApp(ctk.CTk):
         except ValueError:
             self._log(f"[ERR] '{text}' is not a valid number.")
             return
-        pct = max(0, min(100, int(round(value))))
-        self._apply_amplitude(pct)
+        db = max(0.0, min(80.0, value))
+        self._apply_gain(db)
 
-    def _apply_amp_preset(self, pct: int):
-        self._apply_amplitude(pct)
+    def _apply_gain_preset(self, db: float):
+        self._apply_gain(float(db))
 
-    def _on_amp_slider_move(self, value):
-        pct = int(round(float(value)))
-        self._amp_display.configure(text=f"{pct} %")
+    def _on_gain_slider_move(self, value):
+        db = float(value)
+        self._update_gain_display(db)
         if self._amp_debounce_id is not None:
             self.after_cancel(self._amp_debounce_id)
         self._amp_debounce_id = self.after(
-            120, lambda: self._send_amp_command(pct))
+            120, lambda: self._send_gain_command(db))
 
-    def _apply_amplitude(self, pct: int):
-        self._amp_var.set(pct)
-        self._amp_display.configure(text=f"{pct} %")
-        self._send_amp_command(pct)
+    def _apply_gain(self, db: float):
+        db = max(0.0, min(80.0, db))
+        self._gain_var.set(db)
+        self._update_gain_display(db)
+        self._send_gain_command(db)
 
-    def _send_amp_command(self, pct: int):
-        cmd = f"amp {pct}\r\n"
+    def _update_gain_display(self, db: float):
+        # Defaults match firmware: 0 V -> 0 dB, 80 dB/V slope, 1 V cap.
+        vctl = db / 80.0
+        linear = 10 ** (db / 20.0)
+        self._gain_display.configure(text=f"{db:.1f} dB")
+        self._gain_subtext.configure(
+            text=f"Vctl = {vctl:.3f} V    ×{linear:.2f} V/V")
+
+    def _send_gain_command(self, db: float):
+        self._send_raw(f"gain {db:.2f}\r\n", f"> gain {db:.2f} dB")
+
+    def _send_mute(self):
+        self._gain_var.set(0.0)
+        self._update_gain_display(0.0)
+        self._send_raw("mute\r\n", "> mute")
+
+    def _send_sweep(self):
+        # Default sweep: 0 -> 80 dB, 5 dB steps, 200 ms each (matches firmware).
+        self._send_raw("sweep\r\n", "> sweep (0 → 80 dB, 5 dB / 200 ms)")
+
+    def _open_calibrate_dialog(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("AD603 Two-Point Calibration")
+        dlg.geometry("420x320")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        ctk.CTkLabel(dlg,
+            text="Apply a known Vctl, measure actual gain (dB), enter both.\n"
+                 "Repeat at a second point. Stays in RAM (lost on reset).",
+            font=ctk.CTkFont(size=12),
+            text_color="#9e9e9e",
+            justify="left").pack(padx=16, pady=(16, 10), anchor="w")
+
+        rows = ctk.CTkFrame(dlg, fg_color="transparent")
+        rows.pack(padx=16, pady=4, fill="x")
+
+        v1_e = ctk.CTkEntry(rows, placeholder_text="0.20", width=120)
+        d1_e = ctk.CTkEntry(rows, placeholder_text="16.0", width=120)
+        v2_e = ctk.CTkEntry(rows, placeholder_text="0.80", width=120)
+        d2_e = ctk.CTkEntry(rows, placeholder_text="64.0", width=120)
+
+        for r, (lbl, e) in enumerate([
+            ("V1 (volts)", v1_e), ("Gain1 (dB)", d1_e),
+            ("V2 (volts)", v2_e), ("Gain2 (dB)", d2_e)]):
+            ctk.CTkLabel(rows, text=lbl, width=110,
+                         anchor="e").grid(row=r, column=0, padx=(0, 8), pady=4, sticky="e")
+            e.grid(row=r, column=1, pady=4, sticky="w")
+
+        def submit():
+            try:
+                v1, d1, v2, d2 = (float(v1_e.get()), float(d1_e.get()),
+                                  float(v2_e.get()), float(d2_e.get()))
+            except ValueError:
+                self._log("[ERR] Calibration: all four fields must be numbers.")
+                return
+            self._send_raw(f"cal {v1} {d1} {v2} {d2}\r\n",
+                           f"> cal {v1} {d1} {v2} {d2}")
+            dlg.destroy()
+
+        btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_row.pack(pady=14)
+        ctk.CTkButton(btn_row, text="Cancel", width=110,
+                      fg_color="#37474f", hover_color="#263238",
+                      command=dlg.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btn_row, text="Apply Calibration", width=160,
+                      command=submit).pack(side="left", padx=6)
+
+    def _send_raw(self, cmd: str, log_msg: str):
         if self._serial and self._serial.is_open:
             try:
                 self._serial.write(cmd.encode())
-                self._log(f"> amp {pct}%")
+                self._log(log_msg)
             except Exception as exc:
                 self._log(f"[ERR] Send failed: {exc}")
         else:

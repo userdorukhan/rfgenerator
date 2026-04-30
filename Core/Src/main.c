@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ad9851.h"
+#include "ad603.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,10 +36,8 @@
 /* USER CODE BEGIN PD */
 #define DDS_MIN_FREQUENCY_HZ        (0UL)
 #define DDS_MAX_FREQUENCY_HZ        (10000000UL)
-#define DDS_COMMAND_BUFFER_SIZE     (32U)
+#define DDS_COMMAND_BUFFER_SIZE     (48U)
 #define DDS_COMMAND_IDLE_TIMEOUT_MS (250UL)
-#define DDS_MIN_AMPLITUDE_PCT       (0U)
-#define DDS_MAX_AMPLITUDE_PCT       (100U)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,10 +51,9 @@ COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
 AD9851_HandleTypeDef hdds;
+AD603_HandleTypeDef  hvga;
 static volatile uint32_t dds_requested_frequency_hz = 7700000UL;
 static uint32_t dds_active_frequency_hz = 0UL;
-static volatile uint8_t dds_requested_amplitude_pct = 100U;
-static uint8_t dds_active_amplitude_pct = 255U; /* 255 = uninitialised, forces first apply */
 static char dds_command_buffer[DDS_COMMAND_BUFFER_SIZE];
 static uint32_t dds_command_length = 0UL;
 static volatile uint8_t dds_command_ready = 0U;
@@ -70,10 +68,9 @@ static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 static void DDS_ApplyFrequency(void);
-static void DAC_Init(void);
-static void DAC_SetAmplitude(uint8_t pct);
 static void Console_StartRx(void);
 static void Console_ProcessCommand(void);
+static void Sweep_Run(float db_start, float db_end, float db_step, uint32_t step_ms);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -114,6 +111,23 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
+  /* ============================================================
+   *  SAFETY-CRITICAL BOOT ORDER
+   *  Step 1: bring up the AD603 VGA in its muted state (Vctl=0V)
+   *          BEFORE any RF appears at its input.
+   *  Step 2: only then enable the AD9851 DDS.
+   *  If we reverse this, the AD603 may briefly sit at full gain
+   *  while RF arrives, slamming the LM7171/PA/transformer.
+   * ============================================================ */
+  hvga.dac     = DAC1;
+  hvga.channel = 1U;            /* DAC1_OUT1 -> PA4 -> AD603 DA-input */
+  hvga.slope_db_per_v = 0.0f;   /* Init() seeds defaults if zero      */
+  hvga.offset_db      = 0.0f;
+  if (AD603_Init(&hvga) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   hdds.W_CLK_Port = AD9851_W_CLK_GPIO_Port;
   hdds.W_CLK_Pin = AD9851_W_CLK_Pin;
 
@@ -129,9 +143,8 @@ int main(void)
   hdds.reference_clock_hz = 30000000U;
   hdds.enable_x6_multiplier = 1U;
 
-  AD9851_Init(&hdds);
+  AD9851_Init(&hdds);            /* AD603 already muted — RF safe to enable */
   HAL_Delay(10);
-  DAC_Init();
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
@@ -150,8 +163,12 @@ int main(void)
   BSP_COM_SelectLogPort(COM1);
 #endif
 
-  printf("\r\nDDS console ready. Update dds_requested_frequency_hz (DC..10 MHz) to retune the generator.\r\n");
-  printf("Type a frequency in Hz and press Enter (e.g. 2500000). Type 'status' to query the current output.\r\n");
+  printf("\r\nRF generator console ready. AD603 muted at boot.\r\n");
+  printf("Frequency : '<num>[ Hz|kHz|MHz]'   e.g. 7.7 MHz\r\n");
+  printf("Gain      : 'gain <dB>'  /  'vctl <volts>'  /  'mute'\r\n");
+  printf("Sweep     : 'sweep'   (0->80 dB, 5 dB steps, 200 ms each)\r\n");
+  printf("Calibrate : 'cal <v1> <db1> <v2> <db2>'   (RAM only)\r\n");
+  printf("Status    : 'status'\r\n");
   Console_StartRx();
   DDS_ApplyFrequency();
   /* USER CODE END 2 */
@@ -192,13 +209,6 @@ int main(void)
     if (dds_active_frequency_hz != dds_requested_frequency_hz)
     {
       DDS_ApplyFrequency();
-    }
-
-    if (dds_active_amplitude_pct != dds_requested_amplitude_pct)
-    {
-      dds_active_amplitude_pct = dds_requested_amplitude_pct;
-      DAC_SetAmplitude(dds_active_amplitude_pct);
-      printf("[AMP] Applied %u%%\r\n", (unsigned)dds_active_amplitude_pct);
     }
 
     BSP_LED_Toggle(LED_GREEN);
@@ -339,25 +349,103 @@ static void Console_ProcessCommand(void)
     printf("[DDS] Requested %lu Hz, active %lu Hz\r\n",
            (unsigned long)dds_requested_frequency_hz,
            (unsigned long)dds_active_frequency_hz);
-    printf("[AMP] Requested %u%%, active %u%%\r\n",
-           (unsigned)dds_requested_amplitude_pct,
-           (unsigned)dds_active_amplitude_pct);
+    printf("[VGA] Vctl=%.4f V, Gain=%.2f dB, slope=%.2f dB/V, offset=%.2f dB\r\n",
+           (double)AD603_GetControlVoltage(&hvga),
+           (double)AD603_GetGainDb(&hvga),
+           (double)hvga.slope_db_per_v,
+           (double)hvga.offset_db);
     return;
   }
 
-  /* "amp X" — set amplitude 0-100 % */
-  if (strncmp(command, "amp ", 4) == 0)
+  /* "mute" — drive AD603 to 0 V (minimum gain). */
+  if (strcmp(command, "mute") == 0)
   {
-    char *ampptr = NULL;
-    unsigned long pct = strtoul(command + 4, &ampptr, 10);
-    if ((ampptr == command + 4) || (*ampptr != '\0'))
-    {
-      printf("[AMP] Invalid value '%s'. Use: amp 0..100\r\n", command + 4);
+    if (AD603_Mute(&hvga) == HAL_OK) {
+      printf("[VGA] Muted (Vctl=0 V).\r\n");
+    } else {
+      printf("[VGA] Mute failed.\r\n");
+    }
+    return;
+  }
+
+  /* "gain <dB>" — request gain in dB. Driver clamps to safe range. */
+  if (strncmp(command, "gain ", 5) == 0)
+  {
+    char *p = NULL;
+    float db = (float)strtod(command + 5, &p);
+    if ((p == command + 5) || (*p != '\0')) {
+      printf("[VGA] Invalid: '%s'. Use: gain <dB>\r\n", command + 5);
       return;
     }
-    if (pct > DDS_MAX_AMPLITUDE_PCT) { pct = DDS_MAX_AMPLITUDE_PCT; }
-    dds_requested_amplitude_pct = (uint8_t)pct;
-    printf("[AMP] Requesting %lu%%\r\n", pct);
+    if (AD603_SetGainDb(&hvga, db) != HAL_OK) {
+      printf("[VGA] SetGainDb failed.\r\n");
+      return;
+    }
+    printf("[VGA] Gain=%.2f dB (Vctl=%.4f V)\r\n",
+           (double)AD603_GetGainDb(&hvga),
+           (double)AD603_GetControlVoltage(&hvga));
+    return;
+  }
+
+  /* "vctl <volts>" — request control voltage directly. Hard-clamped to 1.0 V. */
+  if (strncmp(command, "vctl ", 5) == 0)
+  {
+    char *p = NULL;
+    float v = (float)strtod(command + 5, &p);
+    if ((p == command + 5) || (*p != '\0')) {
+      printf("[VGA] Invalid: '%s'. Use: vctl <volts, 0..1>\r\n", command + 5);
+      return;
+    }
+    if (AD603_SetControlVoltage(&hvga, v) != HAL_OK) {
+      printf("[VGA] SetControlVoltage failed.\r\n");
+      return;
+    }
+    printf("[VGA] Vctl=%.4f V (Gain=%.2f dB)\r\n",
+           (double)AD603_GetControlVoltage(&hvga),
+           (double)AD603_GetGainDb(&hvga));
+    return;
+  }
+
+  /* "cal v1 db1 v2 db2" — two-point calibration (RAM only, lost on reset). */
+  if (strncmp(command, "cal ", 4) == 0)
+  {
+    float v1, db1, v2, db2;
+    char *p = command + 4;
+    char *q;
+    v1  = (float)strtod(p, &q); if (q == p) goto cal_err; p = q;
+    db1 = (float)strtod(p, &q); if (q == p) goto cal_err; p = q;
+    v2  = (float)strtod(p, &q); if (q == p) goto cal_err; p = q;
+    db2 = (float)strtod(p, &q); if (q == p) goto cal_err;
+    if (AD603_Calibrate(&hvga, v1, db1, v2, db2) != HAL_OK) {
+      printf("[VGA] Calibration rejected (v1==v2, out of range, or bad slope).\r\n");
+      return;
+    }
+    printf("[VGA] Calibrated. slope=%.3f dB/V, offset=%.3f dB\r\n",
+           (double)hvga.slope_db_per_v,
+           (double)hvga.offset_db);
+    /* Re-mute after calibration so we never sit at a stale Vctl. */
+    AD603_Mute(&hvga);
+    return;
+cal_err:
+    printf("[VGA] Invalid: use 'cal <v1> <db1> <v2> <db2>'\r\n");
+    return;
+  }
+
+  /* "sweep" / "sweep <start> <end> <step> <ms>" — gain ramp test. BLOCKING. */
+  if (strncmp(command, "sweep", 5) == 0 &&
+      (command[5] == '\0' || command[5] == ' '))
+  {
+    float    s = 0.0f, e = AD603_MAX_GAIN_DB, st = 5.0f;
+    uint32_t ms = 200U;
+    if (command[5] == ' ') {
+      char *p = command + 6, *q;
+      s  = (float)strtod(p, &q); if (q != p) p = q;
+      e  = (float)strtod(p, &q); if (q != p) p = q;
+      st = (float)strtod(p, &q); if (q != p) p = q;
+      ms = (uint32_t)strtoul(p, &q, 10);
+      if (ms == 0U) ms = 200U;
+    }
+    Sweep_Run(s, e, st, ms);
     return;
   }
 
@@ -433,28 +521,30 @@ static void DDS_ApplyFrequency(void)
   printf("[DDS] Applied %lu Hz\r\n", (unsigned long)dds_active_frequency_hz);
 }
 
-static void DAC_Init(void)
+static void Sweep_Run(float db_start, float db_end, float db_step, uint32_t step_ms)
 {
-  /* Enable DAC12 clock on APB1L */
-  RCC->APB1LENR |= RCC_APB1LENR_DAC12EN;
-  __DSB();
+  /* Defensive bounds — driver clamps too, but keep loop sane. */
+  if (db_step <= 0.0f) db_step = 1.0f;
+  if (step_ms == 0U)   step_ms = 50U;
+  if (db_start < AD603_MIN_GAIN_DB) db_start = AD603_MIN_GAIN_DB;
+  if (db_end   > AD603_MAX_GAIN_DB) db_end   = AD603_MAX_GAIN_DB;
 
-  /* PA4 = DAC1_OUT1: set to analog mode (MODER bits [9:8] = 11) */
-  GPIOA->MODER |= (0x3UL << (4U * 2U));
+  printf("[VGA] Sweep %.1f -> %.1f dB step %.1f dB, %lu ms/step\r\n",
+         (double)db_start, (double)db_end, (double)db_step,
+         (unsigned long)step_ms);
 
-  /* DAC1 CH1: no trigger, output buffer enabled, channel ON */
-  DAC1->CR &= ~(DAC_CR_TEN1 | DAC_CR_EN1);
-  DAC1->CR |= DAC_CR_EN1;
+  for (float g = db_start; g <= db_end + 0.001f; g += db_step)
+  {
+    AD603_SetGainDb(&hvga, g);
+    printf("[VGA] %.2f dB  (Vctl=%.4f V)\r\n",
+           (double)AD603_GetGainDb(&hvga),
+           (double)AD603_GetControlVoltage(&hvga));
+    HAL_Delay(step_ms);
+  }
 
-  /* Start at 100 % */
-  DAC1->DHR12R1 = 4095U;
-}
-
-static void DAC_SetAmplitude(uint8_t pct)
-{
-  /* Map 0-100 % → 0-4095 (12-bit DAC, right-aligned) */
-  uint32_t val = ((uint32_t)pct * 4095U) / 100U;
-  DAC1->DHR12R1 = val;
+  /* SAFETY: always finish a sweep with the device muted. */
+  AD603_Mute(&hvga);
+  printf("[VGA] Sweep done. Muted.\r\n");
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
