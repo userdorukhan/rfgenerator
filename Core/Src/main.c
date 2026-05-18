@@ -38,8 +38,6 @@
 #define DDS_MAX_FREQUENCY_HZ        (10000000UL)
 #define DDS_COMMAND_BUFFER_SIZE     (48U)
 #define DDS_COMMAND_IDLE_TIMEOUT_MS (250UL)
-#define DDS_MIN_AMPLITUDE_PCT       (0U)
-#define DDS_MAX_AMPLITUDE_PCT       (100U)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,8 +54,6 @@ AD9851_HandleTypeDef hdds;
 AD603_HandleTypeDef  hvga;
 static volatile uint32_t dds_requested_frequency_hz = 7700000UL;
 static uint32_t dds_active_frequency_hz = 0UL;
-static volatile uint8_t dds_requested_amplitude_pct = 100U;
-static uint8_t dds_active_amplitude_pct = 255U; /* 255 = uninitialised, forces first apply */
 static char dds_command_buffer[DDS_COMMAND_BUFFER_SIZE];
 static uint32_t dds_command_length = 0UL;
 static volatile uint8_t dds_command_ready = 0U;
@@ -72,8 +68,6 @@ static void MPU_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 static void DDS_ApplyFrequency(void);
-static void DAC_Init(void);
-static void DAC_SetAmplitude(uint8_t pct);
 static void Console_StartRx(void);
 static void Console_ProcessCommand(void);
 static void Sweep_Run(float db_start, float db_end, float db_step, uint32_t step_ms);
@@ -151,7 +145,6 @@ int main(void)
 
   AD9851_Init(&hdds);            /* AD603 already muted — RF safe to enable */
   HAL_Delay(10);
-  DAC_Init();
 
   /* Initialize COM1 port (115200, 8 bits (7-bit data + 1 stop bit), no parity */
   BspCOMInit.BaudRate   = 115200;
@@ -216,13 +209,6 @@ int main(void)
     if (dds_active_frequency_hz != dds_requested_frequency_hz)
     {
       DDS_ApplyFrequency();
-    }
-
-    if (dds_active_amplitude_pct != dds_requested_amplitude_pct)
-    {
-      dds_active_amplitude_pct = dds_requested_amplitude_pct;
-      DAC_SetAmplitude(dds_active_amplitude_pct);
-      printf("[AMP] Applied %u%%\r\n", (unsigned)dds_active_amplitude_pct);
     }
 
     BSP_LED_Toggle(LED_GREEN);
