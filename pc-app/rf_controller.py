@@ -1,7 +1,10 @@
 """
 RF Generator Controller
-PC-side app for the STM32 AD9851 DDS board.
-Requires: pip install customtkinter pyserial
+PC-side app for the STM32 AD9851 + AD603 RF generator board.
+
+Run from this folder:
+    pip install -r requirements.txt
+    python rf_controller.py
 """
 
 import threading
