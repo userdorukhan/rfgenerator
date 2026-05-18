@@ -166,11 +166,3 @@ Only after step 2 passes:
 This part is owned by Akshay (PA PCB) and Darren (transformer). Don't connect
 the high-voltage stage until they sign off on the gain levels you should be
 operating at and the input-amplitude limits the PA can handle.
-
----
-
-## Bench setup photo / diagram
-
-_(TODO: add a photo of the actual wired-up bench setup. A photo with labelled
-wires is worth a lot more than this text when someone else is trying to
-reproduce it.)_

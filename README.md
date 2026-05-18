@@ -140,5 +140,3 @@ For repo access ask Dorukhan.
 - **No closed-loop amplitude control.** Gain is open-loop; if the user wants
   the actual output to track a setpoint, you'd need to feed back a measured
   amplitude (peak-detect + ADC) and run a control loop in firmware.
-- **Wiring photo is missing** — see the TODO at the bottom of
-  [docs/WIRING.md](docs/WIRING.md#bench-setup-photo--diagram).
