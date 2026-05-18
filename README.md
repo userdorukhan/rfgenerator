@@ -108,22 +108,8 @@ in [Core/README.md](Core/README.md#uart-command-protocol).
 | Jumper wires | 5 for AD9851, 2 for AD603 (control + GND), shared ground. |
 
 The downstream stages (LM7171 driver, power amplifier, step-up transformer,
-electrodes) are owned by other team members — see below.
-
----
-
-## Team & contacts
-
-| Area | Owner | Folder in this repo |
-|---|---|---|
-| Firmware (STM32) | Dorukhan, Krish | [`Core/`](Core/) |
-| PC controller (Python GUI) | Dorukhan, Krish | [`pc-app/`](pc-app/) |
-| Wiring & hookup | Dorukhan, Krish | [`docs/WIRING.md`](docs/WIRING.md) |
-| Simulations | Carolyn | _(separate folder, TBD)_ |
-| Power amplifier PCB | Akshay | _(separate folder, TBD)_ |
-| Transformer research | Darren | _(separate folder, TBD)_ |
-
-For repo access ask Dorukhan.
+electrodes) are owned by other team members and live in separate folders /
+sub-projects.
 
 ---
 
