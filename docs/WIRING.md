@@ -8,6 +8,8 @@ applying power to the downstream high-voltage stage.
 
 ## ⚠️ READ THIS FIRST — AD603 safety
 
+> 📄 **[AD603 datasheet (Analog Devices)](https://www.analog.com/media/en/technical-documentation/data-sheets/AD603.pdf)**
+
 The AD603 control input **must never exceed 1.0 V**. Above ~1.2 V the device
 self-oscillates, sending uncontrolled energy into the LM7171 driver → power
 amplifier → step-up transformer → high-voltage electrodes. The downstream
@@ -29,6 +31,13 @@ the pre-flight checklist at the bottom of this file.
 
 ## Pin assignments (STM32H723ZG Nucleo-144)
 
+![Nucleo-H723ZG pinout diagram](Nucleo-144_Pinout.png)
+
+> **Key connectors used by this project:** CN7 (PA4 DAC output, GND) and CN10
+> (PE9, PE11, PE14, PG12 for DDS bit-bang). The ST-Link USB connection on the
+> top edge handles the UART virtual COM port — no extra wires needed for PC
+> communication.
+
 | Signal | STM32 pin | Nucleo header | Goes to |
 |---|---|---|---|
 | AD9851 W_CLK (word clock) | PG12 | CN10-16 | AD9851 module W_CLK pin |
@@ -48,8 +57,19 @@ Plugging the USB cable into the Nucleo gives you a virtual COM port at
 
 ## STM32 ↔ AD9851 DDS module
 
+> 🛒 **[AD9851 DDS module (Amazon — HC-SR08 board)](https://www.amazon.com/Signal-Generator-Development-0-70MHz-0-40MHz/dp/B0DWDW97YV/ref=sr_1_2?sr=8-2)**
+
 The AD9851 is bit-banged over 4 GPIOs. No SPI peripheral is used, so the
 wiring is straightforward.
+
+The images below show the physical board and its schematic. The **top header
+(J4/CON8)** is the one used by this project — it exposes W_CLK, FQ_UD, DATA
+(D7 in serial mode), and RESET, which are the four control lines the firmware
+drives. The sine output appears on **Z_OUT / QOUT** on the right-side header.
+
+| PCB (back of board — pin labels visible) | Schematic |
+|:---:|:---:|
+| ![AD9851 PCB](AD9851_PCB.jpg) | ![AD9851 schematic](AD9851_Schematic.jpg) |
 
 ```
 STM32H723ZG          AD9851 module

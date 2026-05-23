@@ -43,7 +43,9 @@ rfgenerator/
 │   └── README.md                  ◄── install, UI walkthrough, workflows
 │
 ├── docs/
-│   └── WIRING.md                  ◄── pinout, hookup, pre-flight checklist
+│   ├── WIRING.md                  ◄── pinout, hookup, pre-flight checklist
+│   ├── Nucleo-144_Pinout.png      ◄── Nucleo-H723ZG connector diagram
+│   └── UI.png                     ◄── PC controller screenshot
 │
 ├── Drivers/                       STM32 HAL + Nucleo BSP (vendor — don't edit)
 ├── cmake/                         CubeMX-generated build config
@@ -101,9 +103,9 @@ in [Core/README.md](Core/README.md#uart-command-protocol).
 
 | Item | Notes |
 |---|---|
-| ST Nucleo-H723ZG | Microcontroller dev board. USB-C cable for power + ST-Link. |
-| AD9851 DDS module | Generic AD9851 board; 30 MHz reference assumed in firmware (changeable). |
-| Taidacent dual-AD603 VGA module | Two AD603s cascaded. ~80 dB cascaded gain at 1.0 V Vctl. |
+| [ST Nucleo-H723ZG](https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf) | Microcontroller dev board. USB-C cable for power + ST-Link. |
+| [AD9851 DDS module](https://www.amazon.com/Signal-Generator-Development-0-70MHz-0-40MHz/dp/B0DWDW97YV/ref=sr_1_2?sr=8-2) | Generic AD9851 board (HC-SR08); 30 MHz reference assumed in firmware (changeable). |
+| [Taidacent dual-AD603 VGA module](https://www.analog.com/media/en/technical-documentation/data-sheets/AD603.pdf) | Two AD603s cascaded. ~80 dB cascaded gain at 1.0 V Vctl. |
 | ±5 V bench supply | For the AD603 module. Do not power from MCU rails. |
 | Jumper wires | 5 for AD9851, 2 for AD603 (control + GND), shared ground. |
 

@@ -33,33 +33,7 @@ This means you can also drive the firmware from any serial terminal
 
 ## UI walkthrough
 
-```
-┌──────────────────────────────────────────────────────┐
-│ Connection                                           │
-│  [COM3 ▼] [↻] [115200 ▼] [Connect]                   │
-│  ●  Disconnected                                     │
-├──────────────────────────────────────────────────────┤
-│ Output Frequency                                     │
-│         7.7 MHz                                      │
-│  ─────●──────────────────────────                    │
-│  0 Hz                          10 MHz                │
-│  [7.7][MHz ▼] [Set Frequency]                        │
-│  Presets: [1 MHz][3.5 MHz][7 MHz][7.7 MHz][10 MHz]   │
-├──────────────────────────────────────────────────────┤
-│ VGA Gain (AD603)   0 V → 0 dB  1 V → 80 dB  CAP 1.0V │
-│         0.0 dB                                       │
-│  Vctl = 0.000 V    ×1.0 V/V                          │
-│  ●─────────────────────────────                      │
-│  0 dB                          80 dB                 │
-│  [0–80] dB [Set Gain] [Mute] [Sweep] [Calibrate…]    │
-│  Presets: [0 dB][20 dB][40 dB][60 dB][80 dB]         │
-├──────────────────────────────────────────────────────┤
-│ Console                                       [Clear]│
-│  [12:34:56] Connected to COM3 at 115200 baud         │
-│  [12:34:56] [DDS] Applied 7700000 Hz                 │
-│  …                                                   │
-└──────────────────────────────────────────────────────┘
-```
+![RF Generator Controller UI](../docs/UI.png)
 
 ### Connection panel
 - **Port dropdown**: lists available serial ports. Hit ↻ if you plugged the
