@@ -1,6 +1,10 @@
 # PA107 Power Amplifier PCB
 
 This PCB serves as the primary RF amplifier stage for the charge detection mass spectrometer. It takes a low-voltage signal from the external DDS, conditions it, and amplifies it to a large output swing for the off-board step-up transformer.
+<p align="center">
+  <img img width="489" height="362.25" src="https://github.com/user-attachments/assets/a21d9af7-0814-4669-99f8-15234c6550a9"/>
+  <img img width="489" height="362.25" src="https://github.com/user-attachments/assets/2d38ccc6-ba83-41d3-b59c-fa7d10567bc6"/>
+</p>
 
 ## Signal Flow
 
@@ -9,6 +13,9 @@ DDS output -> AD603 VGA -> LM7171 pre-amp (x10) -> PA107 power stage (x20) -> ou
 ```
 
 The 1 Vpp DDS sine wave enters the AD603 variable-gain amplifier whose gain is set by an STM32 DAC pin. It then enters the LM7171 op-amp at gain 10 and a PA107 power stage at gain 20, for a fixed gain of 200 after the adjustable front end. The PA107 output passes through an output snubber to the transformer connector.
+<p align="center">
+  <img width="879.75" height="425.25" alt="Screenshot 2026-05-24 at 8 32 04 PM" src="https://github.com/user-attachments/assets/725fdd82-356c-481a-a16b-5dd03bf9be02" />
+</p>
 
 ## Signal Levels and Bandwidth
 
@@ -24,6 +31,10 @@ Note: In practice, the output is rail-limited rather than gain-limited. The PA10
 - Two-stage fixed amplification. Splitting the fixed gain between the LM7171 and PA107 keeps each stage within a comfortable bandwidth and swing range rather than asking a single stage for the full gain.
 - Off-board transformer. The step-up transformer connects through a dedicated output connector, keeping the high-voltage secondary off the amplifier board.
 - Separate supply domains. The PA107 high-voltage rails, the ±15V bias/boost rails, and the ±5V front-end rails are kept distinct, each with its own decoupling and bulk capacitance.
+<p align="center">
+  <img width="443.25" height="339" alt="Screenshot 2026-05-24 at 8 26 25 PM" src="https://github.com/user-attachments/assets/767a1150-1329-4e10-b17a-facaacbc43b4" />
+  <img width="443.25" height="339" alt="Screenshot 2026-05-24 at 8 26 16 PM" src="https://github.com/user-attachments/assets/ddd10c7f-4d77-4bb5-b32a-de6abdd3be09" />
+</p>
 
 ## Safety and Protection
 
