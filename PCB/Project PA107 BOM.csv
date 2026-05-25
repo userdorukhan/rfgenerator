@@ -1,0 +1,23 @@
+﻿,Line #,Name,Description,Designator,Revision ID,Revision State,Revision Status,Quantity,Manufacturer 1,Manufacturer Part Number 1,Manufacturer Lifecycle 1,Supplier 1,Supplier Part Number 1,Supplier Unit Price 1,Supplier Subtotal 1
+,,PA107DP,PA107,B1,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,571-0100,Test Sockets SINGLE PCB SOCK BLK,GND1,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,US1M,Diode 1000 V 1A Surface Mount DO-214AC (SMA),"*1, *2",Unknown server,Unknown server,Unknown server,2,Diotec,P4SMA220A,Volume Production,,,,
+,,1uF,CAP CER 1UF 25V X7R 0805,"C1, C11",Unknown server,Unknown server,Unknown server,2,Yageo Group,CC0805KKX7R8BB105,Volume Production,DigiKey,311-1456-1-ND,0.13,0.26
+,,1uF,1 ÂµF Â±10% 200V Ceramic Capacitor X7R 1812 (4532 Metric),"C2, C3, C4, C8",Unknown server,Unknown server,Unknown server,4,,,,,,,
+,,10nF,10000 pF ±10% 50V Ceramic Capacitor X7R 0805 (2012 Metric),"C6, C9",Unknown server,Unknown server,Unknown server,2,Vishay,VJ0805Y103KXAMP,Volume Production,DigiKey,720-VJ0805Y103KXAMPCT-ND,0.29,0.58
+,,2.2uF,CAP CER 2.2UF 50V X7R 0805,"C5, C7",Unknown server,Unknown server,Unknown server,2,Yageo Group,CC0805KKX7R9BB225,Volume Production,DigiKey,311-3420-1-ND,0.38,0.76
+,,1N4148WT,"High Conductance Fast Switching Diode, 75 V, -55 to 150 degC, 2-Pin SOD523F, RoHS","D1, D2",Unknown server,Unknown server,Unknown server,2,National Semiconductor,1N4148WT,,,,,
+,,SSW-110-03-G-S,"SQ Post Socket, Through-hole, Vertical, -55 to 125 degC, 2.54 mm Pitch, 10-Pin, Female, RoHS","J1, J2, J3",Unknown server,Unknown server,Unknown server,3,Samtec,SSW-110-03-G-S,Volume Production,DigiKey,SSW-110-03-G-S-ND,2.3,6.9
+,,22R,CRGP2512 22Ω 2W ±100ppm/°C 1% 500V,R1,Unknown server,Unknown server,Unknown server,1,TE Connectivity,CRGP2512F22R,,,,,
+,,20k,"RES Thick Film, 20kΩ, 1%, 0.5W, 100ppm/°C, 0805",RFB2,Unknown server,Unknown server,Unknown server,1,Vishay,CRCW080520K0FKEAHP,Volume Production,DigiKey,541-20.0KTCT-ND,0.2,0.2
+,,1k,"RES Thick Film, 1kΩ, 5%, 0.5W, 200ppm/°C, 0805","RIN1, RIN2",Unknown server,Unknown server,Unknown server,2,Vishay,CRCW08051K00JNEAHP,Volume Production,DigiKey,541-1.0KTACT-ND,0.19,0.38
+,,LM7171AIM,"Very High Speed, High Output Current, Voltage Feedback Amplifier",U1,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,571-0100,"Connector Receptacle, Female Sockets Board Edge, Through Hole, Right Angle Black I-Trac","-5V, -VAUX, -VSP, +5V, +VAUX, +VSP, GND2",Unknown server,Unknown server,Unknown server,7,,,,,,,
+,,2.2nF,"HV1812Y222KXHATHV Multilayer Ceramic Capacitor, 2200 pF, 3000 V, ± 10%, X7R, 1812 [4532 Metric]",C10,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,100nF,,"C12, C14",Unknown server,Unknown server,Unknown server,2,,,,,,,
+,,10uF,,"C13, C15",Unknown server,Unknown server,Unknown server,2,,,,,,,
+,,22uF,No Description Available,"CBULK1, CBULK2",Unknown server,Unknown server,Unknown server,2,,,,,,,
+,,2601-1102,Description,OUT,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,47k,47K 0.5W 5% 1210 (3225 Metric)  SMD,"RBL1, RBL2",Unknown server,Unknown server,Unknown server,2,,,,,,,
+,,10k,RES SMD 0805 1/2W 1% 10K OHM,RFB1,Unknown server,Unknown server,Unknown server,1,,,,,,,
+,,AD603ARZ-REEL-REEL7,"Low Noise, 90 MHz Variable Gain Amplifier",U2,Unknown server,Unknown server,Unknown server,1,,,,,,,
