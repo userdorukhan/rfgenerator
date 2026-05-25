@@ -35,6 +35,7 @@ Note: In practice, the output is rail-limited rather than gain-limited. The PA10
   <img width="443.25" height="339" alt="Screenshot 2026-05-24 at 8 26 25 PM" src="https://github.com/user-attachments/assets/767a1150-1329-4e10-b17a-facaacbc43b4" />
   <img width="443.25" height="339" alt="Screenshot 2026-05-24 at 8 26 16 PM" src="https://github.com/user-attachments/assets/ddd10c7f-4d77-4bb5-b32a-de6abdd3be09" />
 </p>
+
 ## Safety and Protection
 
 - Input clamp on the power-stage input to keep it within the bias rails.
