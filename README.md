@@ -4,8 +4,11 @@ This repository contains the design, firmware, and documentation for a custom co
 
 Details regarding the overall design architecture and integration can be found in the [RF Gen Final Deliverable.pptx](./RF%20Gen%20Final%20Deliverable.pptx). Further detail of each system component can be found in their respective folders.
 
+If questions that cannot be answered by this documentation arise, contact the semester project manager: isabella.gutierrez@berkeley.edu
+
 ## Repository Structure
 
+```text
 rfgenerator/
 ├── Firmware/                       # Application firmware and STM32 build configuration
 ├── PCB/                            # PA107 Power Amplifier design files and BOM
