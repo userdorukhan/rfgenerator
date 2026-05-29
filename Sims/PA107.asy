@@ -1,0 +1,46 @@
+Version 4
+SymbolType BLOCK
+LINE Normal -16 -112 -16 0
+LINE Normal 208 0 -16 -112
+LINE Normal -16 112 208 0
+LINE Normal -16 0 -16 112
+TEXT -8 -32 Left 1 -in
+TEXT -9 31 Left 1 +in
+TEXT 62 -53 Left 1 +Vs
+TEXT -12 -81 Left 1 +Vaux
+TEXT 121 -21 Left 1 +Vsp
+TEXT 65 52 Left 1 -Vs
+TEXT 124 18 Left 1 -Vsp
+TEXT -9 79 Left 1 -Vaux
+TEXT 32 0 Left 2 PA107
+SYMATTR Prefix X
+SYMATTR SpiceModel PA107
+SYMATTR Value PA107
+SYMATTR ModelFile PA107.lib
+PIN -16 -32 NONE 8
+PINATTR PinName -in
+PINATTR SpiceOrder 1
+PIN -16 32 NONE 8
+PINATTR PinName +in
+PINATTR SpiceOrder 2
+PIN 208 0 NONE 8
+PINATTR PinName out
+PINATTR SpiceOrder 3
+PIN 16 -96 NONE 8
+PINATTR PinName +Vaux
+PINATTR SpiceOrder 4
+PIN 144 -32 NONE 8
+PINATTR PinName +Vsp
+PINATTR SpiceOrder 5
+PIN 144 32 NONE 8
+PINATTR PinName -Vsp
+PINATTR SpiceOrder 6
+PIN 16 96 NONE 8
+PINATTR PinName -Vaux
+PINATTR SpiceOrder 7
+PIN 80 -64 NONE 8
+PINATTR PinName +Vs
+PINATTR SpiceOrder 8
+PIN 80 64 NONE 8
+PINATTR PinName -Vs
+PINATTR SpiceOrder 9
